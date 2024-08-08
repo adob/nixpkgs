@@ -1,0 +1,111 @@
+From fdda5620389badee998fe1926ddd3b46f7a6bcd8 Mon Sep 17 00:00:00 2001
+From: Guilhem Saurel <guilhem.saurel@laas.fr>
+Date: Tue, 28 May 2024 13:31:59 +0200
+Subject: [PATCH] CMake: allow absolute install paths
+
+---
+ cmake/VISPGenerateConfig.cmake       | 21 ++++++++-----
+ cmake/VISPGenerateConfigScript.cmake | 45 +++++++++++++++++++++-------
+ 2 files changed, 47 insertions(+), 19 deletions(-)
+
+diff --git a/cmake/VISPGenerateConfig.cmake b/cmake/VISPGenerateConfig.cmake
+index 01b548313..340cff630 100644
+--- a/cmake/VISPGenerateConfig.cmake
++++ b/cmake/VISPGenerateConfig.cmake
+@@ -41,14 +41,19 @@
+ # output: path_to_parent, the relative path to go from path_to_child to parent
+ # example: if input =lib/x86_64-linux-gnu, then output=../..
+ macro(get_path_to_parent path_to_child path_to_parent)
+-  set(${path_to_parent} "")
+-  set(input_ "${path_to_child}")
+-  while(input_)
+-    if(input_)
+-      set(${path_to_parent} "${${path_to_parent}}../")
+-    endif()
+-    get_filename_component(input_ "${input_}" PATH)
+-  endwhile(input_)
++  if(IS_ABSOLUTE ${path_to_child})
++    file(RELATIVE_PATH _path_to_parent "${path_to_child}" "${CMAKE_INSTALL_PREFIX}")
++    string(REGEX REPLACE "/$" "" ${path_to_parent} "${_path_to_parent}")
++  else()
++    set(${path_to_parent} "")
++    set(input_ "${path_to_child}")
++    while(input_)
++      if(input_)
++        set(${path_to_parent} "${${path_to_parent}}../")
++      endif()
++      get_filename_component(input_ "${input_}" PATH)
++    endwhile(input_)
++  endif()
+ endmacro()
+ 
+ # Here we determine the relative path from ./${VISP_LIB_INSTALL_PATH} to its parent folder
+diff --git a/cmake/VISPGenerateConfigScript.cmake b/cmake/VISPGenerateConfigScript.cmake
+index 17d480916..04489e5dc 100644
+--- a/cmake/VISPGenerateConfigScript.cmake
++++ b/cmake/VISPGenerateConfigScript.cmake
+@@ -343,8 +343,16 @@ else() # DEFINED CMAKE_HELPER_SCRIPT
+     # Updates VISP_SCRIPT_PC_LIBS (for visp.pc used by pkg-config)
+     #----------------------------------------------------------------------
+     set(exec_prefix "\${prefix}")
+-    set(includedir  "\${prefix}/${VISP_INC_INSTALL_PATH}")
+-    set(libdir      "\${prefix}/${VISP_LIB_INSTALL_PATH}")
++    if(IS_ABSOLUTE ${VISP_INC_INSTALL_PATH})
++      set(includedir  "${VISP_INC_INSTALL_PATH}")
++    else()
++      set(includedir  "\${prefix}/${VISP_INC_INSTALL_PATH}")
++    endif()
++    if(IS_ABSOLUTE ${VISP_LIB_INSTALL_PATH})
++      set(libdir      "${VISP_LIB_INSTALL_PATH}")
++    else()
++      set(libdir      "\${prefix}/${VISP_LIB_INSTALL_PATH}")
++    endif()
+ 
+     # prepend with ViSP own include dir
+     set(VISP_SCRIPT_PC_CFLAGS
+@@ -356,18 +364,33 @@ else() # DEFINED CMAKE_HELPER_SCRIPT
+     vp_list_remove_separator(VISP_SCRIPT_PC_CFLAGS)
+ 
+     # prepend with ViSP own modules first
+-    set(VISP_SCRIPT_PC_LIBS
+-      "-L\${exec_prefix}/${VISP_LIB_INSTALL_PATH}"
+-      "${_modules}"
+-    )
++    if(IS_ABSOLUTE ${VISP_LIB_INSTALL_PATH})
++      set(VISP_SCRIPT_PC_LIBS
++        "-L${VISP_LIB_INSTALL_PATH}"
++        "${_modules}"
++      )
++    else()
++      set(VISP_SCRIPT_PC_LIBS
++        "-L\${exec_prefix}/${VISP_LIB_INSTALL_PATH}"
++        "${_modules}"
++      )
++    endif()
+     if(BUILD_SHARED_LIBS)
+       set(VISP_SCRIPT_PC_LIBS_PRIVATE "${_extra_opt}")
+     else()
+-      set(VISP_SCRIPT_PC_LIBS_PRIVATE
+-        "-L\${exec_prefix}/${VISP_3P_LIB_INSTALL_PATH}"
+-        "${_3rdparty}"
+-        "${_extra_opt}"
+-      )
++      if(IS_ABSOLUTE ${VISP_3P_LIB_INSTALL_PATH})
++        set(VISP_SCRIPT_PC_LIBS_PRIVATE
++          "-L${VISP_3P_LIB_INSTALL_PATH}"
++          "${_3rdparty}"
++          "${_extra_opt}"
++        )
++      else()
++        set(VISP_SCRIPT_PC_LIBS_PRIVATE
++          "-L\${exec_prefix}/${VISP_3P_LIB_INSTALL_PATH}"
++          "${_3rdparty}"
++          "${_extra_opt}"
++        )
++      endif()
+     endif()
+ 
+     vp_list_remove_separator(VISP_SCRIPT_PC_LIBS)
+-- 
+2.34.1
+
